@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>知識テスト試作（Blue Prism / ASTERIA Warp）</title>
+<title>SKILL QUEST（Blue Prism / ASTERIA Warp 知識テスト）</title>
 <style>
 :root{--bg:#F6F7FB;--card:#FFFFFF;--text:#172033;--muted:#64748B;--border:#E3E7EF;--bp:#6255D8;--aw:#087F8C;--ok:#089E91;--ng:#D94D64}
 *{box-sizing:border-box}body{margin:0;font-family:"Noto Sans JP",system-ui,sans-serif;background:var(--bg);color:var(--text);line-height:1.65}
@@ -46,6 +46,18 @@ textarea.export{width:100%;min-height:180px;margin-top:8px;border:1px solid var(
 .examnav [data-finish]{background:var(--bp);color:#fff;border:none;border-radius:12px;padding:12px 22px;cursor:pointer;font:inherit;min-height:48px}
 .examnav .ghost:disabled{opacity:.45;cursor:default}
 .big{font-size:19px;font-weight:700}
+.mockwin{border:1px solid var(--border);border-radius:14px;overflow:hidden;background:#fff;margin:10px 0;box-shadow:0 2px 10px rgba(23,32,51,.06)}
+.mw-head{background:linear-gradient(180deg,#EEF1F7,#E2E7F0);padding:9px 14px;font-weight:700;font-size:14px;border-bottom:1px solid var(--border)}
+.mw-dots{color:#94A3B8;font-size:10px;letter-spacing:2px;margin-right:8px}
+.mw-sub{padding:8px 14px 0;color:var(--muted);font-size:13px}
+.mw-rows{padding:8px 10px}
+.mw-row{display:flex;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin:6px 0;cursor:pointer;background:#FBFCFE}
+.mw-row:hover{border-color:#B9C2D4}
+.mw-row.picked,.mw-row.sel{outline:2px solid var(--bp);background:#F0EEFF}
+.mw-label{color:var(--muted);font-size:14px}
+.mw-value{font-weight:700;font-size:14px;text-align:right}
+.mw-none{background:#F4F8F7}
+.mw-foot{padding:0 14px 10px;color:var(--muted);font-size:11px}
 .notice{max-width:880px;margin:0 auto;padding:8px 20px 28px;color:var(--muted);font-size:12px;line-height:1.7}
 </style>
 </head>

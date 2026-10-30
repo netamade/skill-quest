@@ -111,11 +111,12 @@
     state.picked = null; state.pickedReason = null; state.locked = false;
     let body = "";
     if (q.type === "ui_spot") body = flowSvg(q.ui.flow) + `<p class="sel" id="selLabel">ノードをクリックして選んでください</p>`;
+    if (q.type === "screen_spot") body = screenHtml(q, null) + `<p class="sel" id="selLabel">誤っていると思う行をクリックして選んでください</p>`;
     const shown = q.shuffle ? shuffle(q.choices) : q.choices;
     const choices = shown.map((c) =>
       `<button class="choice" data-choice="${esc(c.id)}">${esc(c.text)}</button>`).join("");
     app.innerHTML = header() + `<div class="card">
-      <div class="meta">${esc(domainName(q.domain))} ｜ ${state.idx + 1} / ${qs.length}問 ｜ ${q.type === "ui_spot" ? "UI再現問題（誤り探し）" : "四択"}</div>
+      <div class="meta">${esc(domainName(q.domain))} ｜ ${state.idx + 1} / ${qs.length}問 ｜ ${q.type === "ui_spot" || q.type === "screen_spot" ? "画面再現問題（誤り探し）" : "四択"}</div>
       <h2 class="stem">${esc(q.stem)}</h2>
       ${body}
       <div class="choices">${choices}</div>
@@ -126,13 +127,14 @@
     app.querySelectorAll("[data-choice]").forEach((b) => {
       b.onclick = () => {
         if (state.locked) return;
-        if (q.type === "ui_spot") state.pickedReason = b.dataset.choice; else state.picked = b.dataset.choice;
+        if (q.type === "ui_spot" || q.type === "screen_spot") state.pickedReason = b.dataset.choice; else state.picked = b.dataset.choice;
         app.querySelectorAll("[data-choice]").forEach((x) => x.classList.toggle("picked", x === b));
         updateAnswerBtn(q);
       };
     });
     document.getElementById("answerBtn").onclick = () => grade(q);
     if (q.type === "ui_spot") bindFlow(q);
+    if (q.type === "screen_spot") bindScreen(q);
   }
 
   function stageClass(stage) {
@@ -223,8 +225,10 @@
   }
   function gradeExamQuestion(q, ans) {
     if (!ans) return false;
-    if (q.type === "ui_spot") {
-      const locOk = q.answer.includes(ans.node) || (q.ui.accept || []).includes(ans.node);
+    if (q.type === "ui_spot" || q.type === "screen_spot") {
+      let locOk;
+      if (q.type === "screen_spot" && q.answer.length === 0) locOk = ans.node === "__none__";
+      else locOk = q.answer.includes(ans.node) || ((q.ui && q.ui.accept) || []).includes(ans.node);
       const reasonOk = ans.reason === "r1";
       return locOk && reasonOk;
     }
@@ -238,14 +242,15 @@
     const ans = ex.answers[q.id] || {};
     let body = "";
     if (q.type === "ui_spot") body = flowSvg(q.ui.flow) + `<p class="sel" id="selLabel">${ans.node ? "選択中：" + esc((q.ui.flow.nodes.find((n) => n.id === ans.node) || {}).label || ans.node) : "ノードをクリックして選んでください"}</p>`;
+    if (q.type === "screen_spot") body = screenHtml(q, ans.node || null);
     const shown = q.shuffle ? q.choices : q.choices;
     const choices = shown.map((c) => {
-      const picked = q.type === "ui_spot" ? ans.reason === c.id : ans.choice === c.id;
+      const picked = q.type === "ui_spot" || q.type === "screen_spot" ? ans.reason === c.id : ans.choice === c.id;
       return `<button class="choice ${picked ? "picked" : ""}" data-choice="${esc(c.id)}">${esc(c.text)}</button>`;
     }).join("");
     const answeredCount = qs.filter((x) => {
       const a = ex.answers[x.id];
-      return a && (x.type === "ui_spot" ? (a.node && a.reason) : a.choice);
+      return a && (x.type === "ui_spot" || x.type === "screen_spot" ? (a.node && a.reason) : a.choice);
     }).length;
     app.innerHTML = header() + `<div class="card">
       <div class="meta">${esc(ex.cfg.label)} ｜ ${state.idx + 1} / ${qs.length}問 ｜ 回答済み ${answeredCount} ｜ <span id="timer">${esc(timerText())}</span></div>
@@ -264,11 +269,11 @@
     app.querySelectorAll("[data-choice]").forEach((b) => {
       b.onclick = () => {
         const a = ex.answers[q.id] || (ex.answers[q.id] = {});
-        if (q.type === "ui_spot") a.reason = b.dataset.choice; else a.choice = b.dataset.choice;
+        if (q.type === "ui_spot" || q.type === "screen_spot") a.reason = b.dataset.choice; else a.choice = b.dataset.choice;
         renderExam();
       };
     });
-    if (q.type === "ui_spot") {
+    if (q.type === "ui_spot" || q.type === "screen_spot") {
       app.querySelectorAll("[data-el]").forEach((g) => {
         const pick = () => {
           const a = ex.answers[q.id] || (ex.answers[q.id] = {});
@@ -377,7 +382,7 @@
   }
 
   function updateAnswerBtn(q) {
-    const ok = q.type === "ui_spot" ? (state.picked && state.pickedReason) : state.picked;
+    const ok = q.type === "ui_spot" || q.type === "screen_spot" ? (state.picked && state.pickedReason) : state.picked;
     document.getElementById("answerBtn").disabled = !ok;
   }
 
@@ -440,11 +445,45 @@
     });
   }
 
+  function screenHtml(q, selectedId) {
+    const sc = q.screen || {};
+    const rows = (sc.rows || []).map((r) =>
+      `<div class="mw-row ${selectedId === r.id ? "sel" : ""}" data-el="${esc(r.id)}" tabindex="0" role="button">
+        <span class="mw-label">${esc(r.label)}</span><span class="mw-value">${esc(r.value)}</span></div>`).join("");
+    return `<div class="mockwin" role="group" aria-label="設定画面（学習用モック）">
+      <div class="mw-head"><span class="mw-dots">● ● ●</span> ${esc(sc.title || "設定画面")}</div>
+      ${sc.subtitle ? `<div class="mw-sub">${esc(sc.subtitle)}</div>` : ""}
+      <div class="mw-rows">${rows}
+        <div class="mw-row mw-none ${selectedId === "__none__" ? "sel" : ""}" data-el="__none__" tabindex="0" role="button">
+          <span class="mw-label">誤っている箇所はない</span><span class="mw-value">この設定で正しい</span></div>
+      </div>
+      <div class="mw-foot">※ 自作のモック画面です。実際の製品とはデザイン・レイアウトが異なります。</div>
+    </div>`;
+  }
+
+  function bindScreen(q) {
+    app.querySelectorAll("[data-el]").forEach((g) => {
+      const pick = () => {
+        if (state.locked) return;
+        state.picked = g.dataset.el;
+        app.querySelectorAll("[data-el]").forEach((x) => x.classList.toggle("picked", x === g));
+        const row = (q.screen.rows || []).find((r) => r.id === state.picked);
+        const label = state.picked === "__none__" ? "誤っている箇所はない" : (row ? row.label + "：" + row.value : state.picked);
+        document.getElementById("selLabel").textContent = "選択中：" + label;
+        updateAnswerBtn(q);
+      };
+      g.addEventListener("click", pick);
+      g.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pick(); } });
+    });
+  }
+
   function grade(q) {
     state.locked = true; state.answered++;
     let correct = false, partial = "";
-    if (q.type === "ui_spot") {
-      const locOk = q.answer.includes(state.picked) || (q.ui.accept || []).includes(state.picked);
+    if (q.type === "ui_spot" || q.type === "screen_spot") {
+      let locOk;
+      if (q.type === "screen_spot" && q.answer.length === 0) locOk = state.picked === "__none__";
+      else locOk = q.answer.includes(state.picked) || ((q.ui && q.ui.accept) || []).includes(state.picked);
       const reasonOk = state.pickedReason === q.choices.find((c) => c.why && c.why.indexOf("正解") === 0)?.id || state.pickedReason === "r1";
       correct = locOk && reasonOk;
       if (locOk && !reasonOk) partial = "場所は合っています。理由を確認しましょう。";
