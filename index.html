@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>知識テスト試作（Blue Prism / ASTERIA Warp）</title>
+<style>
+:root{--bg:#F6F7FB;--card:#FFFFFF;--text:#172033;--muted:#64748B;--border:#E3E7EF;--bp:#6255D8;--aw:#087F8C;--ok:#089E91;--ng:#D94D64}
+*{box-sizing:border-box}body{margin:0;font-family:"Noto Sans JP",system-ui,sans-serif;background:var(--bg);color:var(--text);line-height:1.65}
+#app{max-width:880px;margin:0 auto;padding:16px}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.tabs button{border:1px solid var(--border);background:#fff;border-radius:999px;padding:8px 16px;cursor:pointer;font:inherit}
+.tabs button.on{background:var(--bp);color:#fff;border-color:var(--bp)}
+.score{color:var(--muted);font-size:14px}.disc{color:var(--muted);font-size:12px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:20px;margin-top:12px}
+.meta{color:var(--muted);font-size:13px}.stem{font-size:19px;margin:8px 0 12px}
+.choices{display:grid;gap:10px;margin:12px 0}
+.choice{text-align:left;border:1px solid var(--border);background:#fff;border-radius:12px;padding:12px 14px;cursor:pointer;font:inherit;min-height:48px}
+.choice.picked{border-color:var(--bp);background:#EFEDFB}
+#answerBtn,#nextBtn,#restart{background:var(--bp);color:#fff;border:none;border-radius:12px;padding:12px 22px;cursor:pointer;font:inherit;min-height:48px}
+#answerBtn:disabled{background:#B9BDD0;cursor:default}
+.fb{border-radius:12px;padding:14px;margin-top:14px}.fb.ok{background:#E6F6F3}.fb.ng{background:#FDECEF}
+.src{font-size:13px;color:var(--muted)}.mocknote{font-size:12px;color:var(--muted)}
+.flow{width:100%;height:auto;background:#FBFBFE;border:1px solid var(--border);border-radius:12px}
+.flow .node{fill:#fff;stroke:#94A3B8;stroke-width:1.5}
+.flow .edge{stroke:#64748B;stroke-width:1.5;fill:none}
+.flow .group{fill:none;stroke:#C4B5FD;stroke-dasharray:5 4}
+.flow .nlabel{text-anchor:middle;font-size:12px;fill:var(--text);pointer-events:none}
+.flow .elabel{font-size:11px;fill:var(--muted)}
+.flow .glabel{font-size:11px;fill:var(--muted)}
+.flow g[data-el]{cursor:pointer}
+.flow g[data-el].picked .node{stroke:var(--bp);stroke-width:3}
+.sel{font-size:14px;color:var(--muted)}
+.bar2{display:flex;align-items:center;gap:10px}
+.ghost{border:1px solid var(--border);background:#fff;border-radius:999px;padding:8px 14px;cursor:pointer;font:inherit;min-height:40px}
+.drow{border:1px solid var(--border);border-radius:14px;padding:12px 14px;margin:10px 0;background:#fff}
+.dmain{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.dname{font-weight:600}
+.dsub{color:var(--muted);font-size:13px;margin:6px 0}
+.chip{border-radius:999px;padding:2px 12px;font-size:13px;font-weight:600;color:#fff}
+.chip.st0{background:#94A3B8}.chip.st1{background:#E28C35}.chip.st2{background:#089E91}.chip.st3{background:#D2A12A}
+.mapbtns{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+#allPractice{background:var(--bp);color:#fff;border:none;border-radius:12px;padding:12px 22px;cursor:pointer;font:inherit;min-height:48px}
+textarea.export{width:100%;min-height:180px;margin-top:8px;border:1px solid var(--border);border-radius:12px;padding:10px;font-family:ui-monospace,monospace;font-size:12px}
+.examnav{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;align-items:center}
+.examnav [data-finish]{background:var(--bp);color:#fff;border:none;border-radius:12px;padding:12px 22px;cursor:pointer;font:inherit;min-height:48px}
+.examnav .ghost:disabled{opacity:.45;cursor:default}
+.big{font-size:19px;font-weight:700}
+.notice{max-width:880px;margin:0 auto;padding:8px 20px 28px;color:var(--muted);font-size:12px;line-height:1.7}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<footer class="notice">本サイトは個人の学習用に作成した非公式の練習サイトです。Blue Prism社・ASTERIA社および各公式認定試験とは関係ありません。画面再現問題は自作のモック画面で、実際の製品とはデザイン・レイアウトが異なります。</footer>
+<script src="data.js"></script>
+<script src="engine.js"></script>
+</body>
+</html>
