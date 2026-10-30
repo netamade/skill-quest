@@ -80,11 +80,10 @@
 
   function header() {
     const c = data().config;
+    const tabs = Object.keys(window.KT_DATA).map((pid) =>
+      `<button data-prod="${pid}" class="${state.product === pid ? "on" : ""}">${esc(window.KT_DATA[pid].config.displayName)}</button>`).join("");
     return `<div class="bar">
-      <div class="tabs">
-        <button data-prod="blueprism" class="${state.product === "blueprism" ? "on" : ""}">Blue Prism</button>
-        <button data-prod="asteria" class="${state.product === "asteria" ? "on" : ""}">ASTERIA Warp</button>
-      </div>
+      <div class="tabs">${tabs}</div>
       <div class="bar2">
         <button data-view="map" class="ghost">分野マップ</button>
         <span class="score">正解 ${state.score} / 回答 ${state.answered}</span>
@@ -325,13 +324,15 @@
       `<div class="drow"><div class="dmain"><span class="dname">${esc(domainName(code))}</span><span>${r.perDomain[code].ok} / ${r.perDomain[code].n}問正解</span></div></div>`).join("");
     const passHtml = r.passInfo
       ? (r.passInfo.reached
-          ? `<p class="big">サイト内目安（正答率70%）に到達しました！</p>`
+          ? `<p class="big">サイト内目安（正答率${Math.round((ex.cfg.pass ? ex.cfg.pass.value : 0.7) * 100)}%）に到達しました！</p>`
           : `<p class="big">目安まであと${r.passInfo.shortBy}問正解で到達です。</p>`)
         + `<p class="src">${esc(r.passInfo.note)}</p>`
-      : `<p class="src">公式認定試験がないため、合格目安は表示しません。</p>`;
+      : `<p class="src">このモードでは合格目安は表示しません。</p>`;
+    const fullNote = ex.limitSec && ex.cfg.count && r.total < ex.cfg.count
+      ? `（短縮版のため本番の${ex.cfg.count}問・${Math.round(ex.limitSec / 60)}分とは異なります）` : "";
     app.innerHTML = header() + `<div class="card"><h2>結果（${esc(ex.cfg.label)}）</h2>
       <p class="big">${r.total}問中 ${r.correct}問正解（正答率 ${Math.round(r.ratio * 100)}%）</p>
-      <p class="src">所要時間 ${fmtClock(r.usedSec)}${ex.limitSec ? " / 制限 " + fmtClock(ex.limitSec) : ""}（短縮版のため本番の60問・75分とは異なります）</p>
+      <p class="src">所要時間 ${fmtClock(r.usedSec)}${ex.limitSec ? " / 制限 " + fmtClock(ex.limitSec) : ""}${fullNote}</p>
       ${passHtml}
       ${rows}
       <div class="mapbtns">
