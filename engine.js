@@ -111,7 +111,7 @@
     const q = qs[state.idx];
     state.picked = null; state.pickedReason = null; state.locked = false;
     let body = "";
-    if (q.type === "ui_spot") body = flowSvg(q.ui.flow) + `<p class="sel" id="selLabel">ノードをクリックして選んでください</p>`;
+    if (q.type === "ui_spot") body = flowSvg(q.ui.flow) + `<p class="sel" id="selLabel">${q.ui.flow.edgePick ? "ノードまたは接続線をクリックして選んでください" : "ノードをクリックして選んでください"}</p>`;
     if (q.type === "screen_spot") body = screenHtml(q, null) + `<p class="sel" id="selLabel">誤っていると思う行をクリックして選んでください</p>`;
     const shown = q.shuffle ? shuffle(q.choices) : q.choices;
     const choices = shown.map((c) =>
@@ -242,7 +242,18 @@
     const q = qs[state.idx];
     const ans = ex.answers[q.id] || {};
     let body = "";
-    if (q.type === "ui_spot") body = flowSvg(q.ui.flow) + `<p class="sel" id="selLabel">${ans.node ? "選択中：" + esc((q.ui.flow.nodes.find((n) => n.id === ans.node) || {}).label || ans.node) : "ノードをクリックして選んでください"}</p>`;
+    if (q.type === "ui_spot") {
+      const selEdge = ans.node ? (q.ui.flow.edges || []).find((e) => e.id === ans.node) : null;
+      const selNode = ans.node ? q.ui.flow.nodes.find((n) => n.id === ans.node) : null;
+      let selText = q.ui.flow.edgePick ? "ノードまたは接続線をクリックして選んでください" : "ノードをクリックして選んでください";
+      if (selNode) selText = "選択中：" + selNode.label;
+      else if (selEdge) {
+        const fl = (q.ui.flow.nodes.find((n) => n.id === selEdge.from) || {}).label || selEdge.from;
+        const tl = (q.ui.flow.nodes.find((n) => n.id === selEdge.to) || {}).label || selEdge.to;
+        selText = "選択中：接続：" + fl + " → " + tl;
+      } else if (ans.node) selText = "選択中：" + ans.node;
+      body = flowSvg(q.ui.flow, ans.node || null) + `<p class="sel" id="selLabel">${esc(selText)}</p>`;
+    }
     if (q.type === "screen_spot") body = screenHtml(q, ans.node || null);
     const shown = q.shuffle ? q.choices : q.choices;
     const choices = shown.map((c) => {
@@ -389,7 +400,7 @@
     document.getElementById("answerBtn").disabled = !ok;
   }
 
-  function flowSvg(flow) {
+  function flowSvg(flow, selectedId) {
     const cellW = 180, cellH = 96, m = 24;
     const pos = {};
     flow.nodes.forEach((n) => { pos[n.id] = { x: m + n.col * cellW + cellW / 2, y: m + n.row * cellH + cellH / 2, n }; });
@@ -415,7 +426,14 @@
         const midY = a.y + cellH / 2;
         d = `M${a.x},${a.y + 26} L${a.x},${midY} L${b.x},${midY} L${b.x},${b.y - 26}`;
       }
-      s += `<path d="${d}" class="edge" marker-end="url(#arr)"/>`;
+      if (flow.edgePick) {
+        const fromL = (flow.nodes.find((n) => n.id === e.from) || {}).label || e.from;
+        const toL = (flow.nodes.find((n) => n.id === e.to) || {}).label || e.to;
+        s += `<path d="${d}" class="edge${selectedId === e.id ? " picked" : ""}" data-visfor="${esc(e.id)}" marker-end="url(#arr)"/>`;
+        s += `<path d="${d}" class="edgehit" data-el="${esc(e.id)}" tabindex="0" role="button" aria-label="接続: ${esc(fromL)} から ${esc(toL)}"/>`;
+      } else {
+        s += `<path d="${d}" class="edge" marker-end="url(#arr)"/>`;
+      }
       if (e.label) s += `<text x="${(a.x + b.x) / 2 + 6}" y="${(a.y + b.y) / 2}" class="elabel">${esc(e.label)}</text>`;
     });
     flow.nodes.forEach((n) => {
@@ -425,7 +443,7 @@
         : n.kind === "start" || n.kind === "end"
           ? `<rect x="${p.x - 52}" y="${p.y - 20}" width="104" height="40" rx="20" class="node"/>`
           : `<rect x="${p.x - 70}" y="${p.y - 24}" width="140" height="48" rx="8" class="node"/>`;
-      s += `<g data-el="${esc(n.id)}" tabindex="0" role="button" aria-label="ノード: ${esc(n.label)}">${shape}
+      s += `<g data-el="${esc(n.id)}" tabindex="0" role="button" aria-label="ノード: ${esc(n.label)}" class="${selectedId === n.id ? "picked" : ""}">${shape}
         <rect x="${p.x - 70}" y="${p.y - 24}" width="140" height="48" fill="transparent"/>
         <text x="${p.x}" y="${p.y + 4}" class="nlabel">${esc(n.label)}</text></g>`;
     });
@@ -439,8 +457,17 @@
         if (state.locked) return;
         state.picked = g.dataset.el;
         app.querySelectorAll("[data-el]").forEach((x) => x.classList.toggle("picked", x === g));
+        app.querySelectorAll("[data-visfor]").forEach((x) => x.classList.toggle("picked", x.dataset.visfor === state.picked));
         const node = q.ui.flow.nodes.find((n) => n.id === state.picked);
-        document.getElementById("selLabel").textContent = "選択中：" + (node ? node.label : state.picked);
+        const edge = (q.ui.flow.edges || []).find((e) => e.id === state.picked);
+        let label = state.picked;
+        if (node) label = node.label;
+        else if (edge) {
+          const fl = (q.ui.flow.nodes.find((n) => n.id === edge.from) || {}).label || edge.from;
+          const tl = (q.ui.flow.nodes.find((n) => n.id === edge.to) || {}).label || edge.to;
+          label = "接続：" + fl + " → " + tl;
+        }
+        document.getElementById("selLabel").textContent = "選択中：" + label;
         updateAnswerBtn(q);
       };
       g.addEventListener("click", pick);
