@@ -73,7 +73,9 @@
     stopTimer();
     state.mode = "practice"; state.exam = null;
     state.filter = filter || null;
-    state.session = filter ? allQuestions().filter((q) => q.domain === filter) : allQuestions().slice();
+    // Practice order is shuffled on every session start (product tab, domain pick, restart)
+    // so a fresh question greets the learner each time — at eguchi's request, 2026-10-31.
+    state.session = shuffle(filter ? allQuestions().filter((q) => q.domain === filter) : allQuestions());
     state.idx = 0; state.score = 0; state.answered = 0; state.view = "quiz";
     render();
   }
