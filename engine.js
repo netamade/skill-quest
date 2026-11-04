@@ -5,7 +5,7 @@
    Judgement: config.judgement (weighted recent-window accuracy, decay, min evidence). */
 (function () {
   const app = document.getElementById("app");
-  const state = { product: "blueprism", view: "quiz", mode: "practice", filter: null, session: [], idx: 0, score: 0, answered: 0, picked: null, pickedReason: null, locked: false, exam: null, timerId: null };
+  const state = { product: "blueprism", view: "quiz", mode: "practice", filter: null, session: [], idx: 0, score: 0, answered: 0, picked: null, pickedReason: null, locked: false, exam: null, timerId: null, resumed: false };
 
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const data = () => window.KT_DATA[state.product];
@@ -43,6 +43,31 @@
     saveRecords(rec);
   }
 
+  /* ---------- practice-session resume (saved inside the product record) ---------- */
+  function saveResumeAt(pos) {
+    if (state.mode !== "practice" || !state.session.length) return;
+    const rec = loadRecords();
+    rec.resume = { filter: state.filter, ids: state.session.map((q) => q.id), idx: pos, score: state.score, answered: state.answered, savedAt: Date.now() };
+    saveRecords(rec);
+  }
+  function clearResume() {
+    const rec = loadRecords();
+    if (rec.resume) { delete rec.resume; saveRecords(rec); }
+  }
+  function tryResume(filter) {
+    const rec = loadRecords();
+    const r = rec.resume;
+    if (!r || (r.filter || null) !== (filter || null) || !Array.isArray(r.ids)) return false;
+    if (!(r.idx >= 0 && r.idx < r.ids.length)) return false;
+    const byId = {};
+    allQuestions().forEach((q) => { byId[q.id] = q; });
+    if (!r.ids.every((id) => byId[id])) return false;
+    state.session = r.ids.map((id) => byId[id]);
+    state.idx = r.idx; state.score = r.score || 0; state.answered = r.answered || 0;
+    state.resumed = true;
+    return true;
+  }
+
   /* ---------- judgement (per domain) ---------- */
   function domainStats(code) {
     const cfg = data().config.judgement;
@@ -66,17 +91,37 @@
     return { attempts: ev.length, evidence: win.length, weighted, coverage, stage, total: qs.length, attempted };
   }
 
+  /* ---------- overall achievement (for the header strip / completion screen) ---------- */
+  function overallStats() {
+    const qs = allQuestions();
+    const rec = loadRecords();
+    let attempted = 0, attempts = 0, ok = 0;
+    qs.forEach((q) => {
+      const l = rec.attempts[q.id] || [];
+      if (l.length) attempted++;
+      attempts += l.length;
+      l.forEach((a) => { if (a.ok) ok++; });
+    });
+    const labels = data().config.judgement.labels;
+    const masterDomains = data().config.domains.filter((d) => domainStats(d.code).stage === labels[3]).map((d) => d.name);
+    return { total: qs.length, attempted, attempts, ok, domains: data().config.domains.length, masters: masterDomains.length, masterDomains, pct: qs.length ? Math.round(attempted / qs.length * 100) : 0 };
+  }
+
   /* ---------- sessions ---------- */
   function stopTimer() { if (state.timerId) { clearInterval(state.timerId); state.timerId = null; } }
 
-  function startSession(filter) {
+  function startSession(filter, forceFresh) {
     stopTimer();
     state.mode = "practice"; state.exam = null;
     state.filter = filter || null;
-    // Practice order is shuffled on every session start (product tab, domain pick, restart)
-    // so a fresh question greets the learner each time — at eguchi's request, 2026-10-31.
+    state.resumed = false;
+    // Resume the saved practice session for this context when one exists
+    // (eguchi's request, 2026-11-05: continue where you left off).
+    if (!forceFresh && tryResume(state.filter)) { state.view = "quiz"; render(); return; }
+    // Fresh sessions are shuffled on every start (product tab, domain pick, restart).
     state.session = shuffle(filter ? allQuestions().filter((q) => q.domain === filter) : allQuestions());
     state.idx = 0; state.score = 0; state.answered = 0; state.view = "quiz";
+    saveResumeAt(0);
     render();
   }
 
@@ -84,6 +129,7 @@
     const c = data().config;
     const tabs = Object.keys(window.KT_DATA).map((pid) =>
       `<button data-prod="${pid}" class="${state.product === pid ? "on" : ""}">${esc(window.KT_DATA[pid].config.displayName)}</button>`).join("");
+    const a = overallStats();
     return `<div class="bar">
       <div class="tabs">${tabs}</div>
       <div class="bar2">
@@ -91,6 +137,7 @@
         <span class="score">正解 ${state.score} / 回答 ${state.answered}</span>
       </div>
     </div>
+    <div class="achv"><div class="achvbar"><div class="achvfill" style="width:${a.pct}%"></div></div><span class="achvtxt">達成度 ${a.pct}%（解いた問題 ${a.attempted}/${a.total}問 ・ マスター分野 ${a.masters}/${a.domains}）</span></div>
     <p class="disc">${esc(c.disclaimer)}（試作版）</p>`;
   }
 
@@ -99,13 +146,19 @@
     if (state.mode === "exam") { renderExam(); return; }
     const qs = state.session.length ? state.session : allQuestions();
     if (state.idx >= qs.length) {
+      clearResume();
+      const a = overallStats();
+      const acc = qs.length ? state.score / qs.length : 0;
+      const msg = acc >= 0.9 ? "すごい！ほぼ完璧な仕上がりです。" : acc >= 0.7 ? "いい調子！その調子で続けましょう。" : acc >= 0.5 ? "着実に前進しています。" : "間違えた問題こそ伸びしろです。解説をチェックしましょう。";
       app.innerHTML = header() + `<div class="card"><h2>チャレンジ完了！</h2>
+        <p class="big">${esc(msg)}</p>
         <p>${qs.length}問中 ${state.score}問正解でした。</p>
+        <p>通算の達成度は <strong>${a.pct}%</strong>（解いた問題 ${a.attempted}/${a.total}問）です。${a.masterDomains.length ? `マスター分野：${esc(a.masterDomains.join("、"))}。` : ""}</p>
         <p class="src">到達度は分野マップに記録されています。</p>
         <button id="restart">最初から</button>
         <button data-view="map" class="ghost">分野マップを見る</button></div>`;
       bindHeader();
-      document.getElementById("restart").onclick = () => startSession(null);
+      document.getElementById("restart").onclick = () => startSession(null, true);
       return;
     }
     const q = qs[state.idx];
@@ -117,7 +170,9 @@
     const choices = shown.map((c) =>
       `<button class="choice" data-choice="${esc(c.id)}">${esc(c.text)}</button>`).join("");
     app.innerHTML = header() + `<div class="card">
+      ${state.resumed ? `<div class="resume">前回のつづきから再開しました（${state.idx + 1}問目／全${qs.length}問） <button id="resumeReset" class="ghost">最初からやり直す</button></div>` : ""}
       <div class="meta">${esc(domainName(q.domain))} ｜ ${state.idx + 1} / ${qs.length}問 ｜ ${q.type === "ui_spot" || q.type === "screen_spot" ? "画面再現問題（誤り探し）" : "四択"}</div>
+      <div class="sprog"><div style="width:${qs.length ? Math.round(state.answered / qs.length * 100) : 0}%"></div></div>
       <h2 class="stem">${esc(q.stem)}</h2>
       ${body}
       <div class="choices">${choices}</div>
@@ -125,6 +180,8 @@
       <div id="feedback"></div>
     </div>`;
     bindHeader();
+    const rr = document.getElementById("resumeReset");
+    if (rr) rr.onclick = () => startSession(state.filter, true);
     app.querySelectorAll("[data-choice]").forEach((b) => {
       b.onclick = () => {
         if (state.locked) return;
@@ -152,7 +209,8 @@
       return `<div class="drow">
         <div class="dmain"><span class="dname">${esc(d.name)}</span>
         <span class="chip ${stageClass(s.stage)}">${esc(s.stage)}</span></div>
-        <div class="dsub">正答率（直近加重） ${pct} ｜ 回答 ${s.attempts} ｜ ${esc(hint)}</div>
+        <div class="dbar"><div style="width:${Math.round(s.coverage * 100)}%"></div></div>
+        <div class="dsub">挑戦済み ${s.attempted}/${s.total}問 ｜ 正答率（直近加重） ${pct} ｜ 回答 ${s.attempts} ｜ ${esc(hint)}</div>
         <button data-domain="${esc(d.code)}" class="ghost">この分野を練習</button>
       </div>`;
     }).join("");
@@ -522,6 +580,10 @@
     }
     if (correct) state.score++;
     recordAttempt(q, correct);
+    state.resumed = false;
+    // Save the resume point at the next question (or clear it when the session is done).
+    if (state.session.length && state.idx + 1 >= state.session.length) clearResume();
+    else saveResumeAt(state.idx + 1);
     const fb = document.getElementById("feedback");
     const src = q.source && q.source[0] && q.source[0].url
       ? `<p class="src">出典: <a href="${esc(q.source[0].url)}" target="_blank" rel="noopener">${esc(q.source[0].title)}</a></p>` : "";
