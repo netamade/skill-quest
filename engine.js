@@ -195,6 +195,78 @@
     if (q.type === "screen_spot") bindScreen(q);
   }
 
+  /* ---------- skill radar + proficiency evaluation ---------- */
+  function domainScore(s) {
+    if (!s.attempts || s.weighted == null) return 0;
+    return Math.round(s.weighted * 100 * s.coverage);
+  }
+  function skillSummary() {
+    const cfg = data().config;
+    const items = cfg.domains.map((d) => {
+      const s = domainStats(d.code);
+      return { code: d.code, name: d.name, stats: s, score: domainScore(s) };
+    });
+    const anyAttempts = items.some((x) => x.stats.attempts > 0);
+    const avg = items.length ? Math.round(items.reduce((a, x) => a + x.score, 0) / items.length) : 0;
+    const rank = !anyAttempts ? "—" : avg >= 80 ? "S" : avg >= 65 ? "A" : avg >= 50 ? "B" : avg >= 35 ? "C" : avg >= 20 ? "D" : "E";
+    const rankMsg = {
+      "S": "全分野で高い水準です。模擬試験で仕上げにいきましょう。",
+      "A": "かなり仕上がっています。残りの分野を埋めれば盤石です。",
+      "B": "基礎は固まってきました。弱点分野を集中して練習しましょう。",
+      "C": "伸びている途中です。未着手の分野にも広げていきましょう。",
+      "D": "まずは1分野を集中して解いて、成功体験を積みましょう。",
+      "E": "これからスタートです。気になる分野から少しずつ始めましょう。",
+    };
+    const comments = [];
+    if (!anyAttempts) {
+      comments.push("まだ記録がありません。まずは1分野を練習してみましょう。");
+    } else {
+      comments.push(rankMsg[rank]);
+      const attempted = items.filter((x) => x.stats.attempts > 0);
+      const best = attempted.reduce((a, x) => (x.score > a.score ? x : a), attempted[0]);
+      if (best && best.score >= 60) comments.push(`得意分野は「${best.name}」（${best.score}点）。この調子で伸ばしましょう。`);
+      const weak = attempted.reduce((a, x) => (x.score < a.score ? x : a), attempted[0]);
+      if (weak && weak !== best && weak.score < 50) comments.push(`「${weak.name}」が伸びしろです（${weak.score}点）。分野別練習での集中特訓がおすすめです。`);
+      const untouched = items.filter((x) => x.stats.attempts === 0).length;
+      if (untouched) comments.push(`未着手の分野が${untouched}つあります。新しい分野にも挑戦してみましょう。`);
+    }
+    return { items, avg, rank, comments, anyAttempts };
+  }
+  function radarSvg(items) {
+    const cx = 190, cy = 160, R = 104;
+    const n = items.length;
+    const pt = (i, v) => {
+      const ang = -Math.PI / 2 + (2 * Math.PI * i) / n;
+      const r = (R * v) / 100;
+      return [cx + r * Math.cos(ang), cy + r * Math.sin(ang), ang];
+    };
+    let s = `<svg viewBox="0 0 380 320" class="radar" role="img" aria-label="スキルレーダーチャート">`;
+    [25, 50, 75, 100].forEach((v) => {
+      const ring = items.map((_, i) => pt(i, v).slice(0, 2).join(",")).join(" ");
+      s += `<polygon points="${ring}" class="ring"/>`;
+    });
+    items.forEach((it, i) => {
+      const [x, y] = pt(i, 100);
+      s += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" class="axis"/>`;
+    });
+    const val = items.map((it, i) => pt(i, it.score).slice(0, 2).join(",")).join(" ");
+    s += `<polygon points="${val}" class="val"/>`;
+    items.forEach((it, i) => {
+      const [x, y] = pt(i, it.score);
+      s += `<circle cx="${x}" cy="${y}" r="3.5" class="vdot"/>`;
+    });
+    items.forEach((it, i) => {
+      const [x, y, ang] = pt(i, 122);
+      const cos = Math.cos(ang);
+      const anchor = cos > 0.35 ? "start" : cos < -0.35 ? "end" : "middle";
+      const seg = it.name.split("・")[0];
+      const label = seg.length <= 10 ? seg : seg.slice(0, 10);
+      s += `<text x="${x}" y="${y + 3}" text-anchor="${anchor}" class="rlabel">${esc(label)} ${it.score}</text>`;
+    });
+    s += `</svg>`;
+    return s;
+  }
+
   function stageClass(stage) {
     return { "未着手": "st0", "挑戦中": "st1", "安定": "st2", "マスター": "st3" }[stage] || "st0";
   }
@@ -210,12 +282,25 @@
         <div class="dmain"><span class="dname">${esc(d.name)}</span>
         <span class="chip ${stageClass(s.stage)}">${esc(s.stage)}</span></div>
         <div class="dbar"><div style="width:${Math.round(s.coverage * 100)}%"></div></div>
-        <div class="dsub">挑戦済み ${s.attempted}/${s.total}問 ｜ 正答率（直近加重） ${pct} ｜ 回答 ${s.attempts} ｜ ${esc(hint)}</div>
+        <div class="dsub">挑戦済み ${s.attempted}/${s.total}問 ｜ 習熟度 ${domainScore(s)}点 ｜ 正答率（直近加重） ${pct} ｜ 回答 ${s.attempts} ｜ ${esc(hint)}</div>
         <button data-domain="${esc(d.code)}" class="ghost">この分野を練習</button>
       </div>`;
     }).join("");
+    const sk = skillSummary();
+    const skillHtml = `<div class="skillbox">
+      <h3>スキルレーダー（${esc(cfg.displayName)}）</h3>
+      <div class="skillflex">
+        ${radarSvg(sk.items)}
+        <div class="skillpanel">
+          <p class="skillrank">総合習熟度 <span class="rankbadge rk${sk.rank}">${esc(sk.rank)}</span> ランク（${sk.avg}点）</p>
+          <p class="src">分野スコア（0〜100点）＝ 正答率（直近加重）× 挑戦済み割合。総合習熟度は全分野の平均です。</p>
+          <ul class="skillcomments">${sk.comments.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>
+        </div>
+      </div>
+    </div>`;
     app.innerHTML = header() + `<div class="card"><h2>分野マップ（${esc(cfg.displayName)}）</h2>
       <p class="src">到達度は直近${cfg.judgement.window}回答の加重正答率で判定します（${cfg.judgement.minEvidence}回答から判定）。記録はこのブラウザに保存されます。</p>
+      ${skillHtml}
       ${rows}
       <div class="mapbtns">
         <button id="allPractice">全分野を練習</button>
