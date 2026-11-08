@@ -35,12 +35,13 @@
     memFallback[storeKey()] = raw;
     try { if (typeof localStorage !== "undefined") localStorage.setItem(storeKey(), raw); } catch (e) { /* in-memory only */ }
   }
-  function recordAttempt(q, correct, mode) {
+  function recordAttempt(q, correct, mode, countDaily = true) {
     const rec = loadRecords();
     const list = rec.attempts[q.id] || (rec.attempts[q.id] = []);
     list.push({ t: Date.now(), ok: !!correct, mode: mode || "practice" });
     if (list.length > 60) list.splice(0, list.length - 60);
     saveRecords(rec);
+    if (countDaily) countDailyAnswer();
   }
 
   /* ---------- practice-session resume (saved inside the product record) ---------- */
@@ -70,8 +71,10 @@
 
   /* ---------- judgement (per domain) ---------- */
   function domainStats(code) {
+    return questionStats(allQuestions().filter((q) => q.domain === code));
+  }
+  function questionStats(qs) {
     const cfg = data().config.judgement;
-    const qs = allQuestions().filter((q) => q.domain === code);
     const rec = loadRecords();
     const ev = [];
     qs.forEach((q) => (rec.attempts[q.id] || []).forEach((a) => { if (!cfg.excludeModes.includes(a.mode)) ev.push(a); }));
@@ -107,6 +110,96 @@
     return { total: qs.length, attempted, attempts, ok, domains: data().config.domains.length, masters: masterDomains.length, masterDomains, pct: qs.length ? Math.round(attempted / qs.length * 100) : 0 };
   }
 
+  /* Daily totals are independent of capped attempt histories and shared across tools.
+     No historical timestamps are inferred or migrated. Completed days are immutable. */
+  const dailyKey = "kt:daily:v1";
+  const goals = [3, 5, 10, 20];
+  function localDay(date = new Date()) {
+    return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
+  }
+  function loadDaily() {
+    let d;
+    try { d = JSON.parse(localStorage.getItem(dailyKey) || memFallback[dailyKey] || "null"); } catch (e) { d = JSON.parse(memFallback[dailyKey] || "null"); }
+    if (!d || typeof d !== "object") d = {};
+    return { v: 1, goal: goals.includes(d.goal) ? d.goal : 5,
+      days: d.days && typeof d.days === "object" && !Array.isArray(d.days) ? d.days : {} };
+  }
+  function saveDaily(d) {
+    memFallback[dailyKey] = JSON.stringify(d);
+    try { localStorage.setItem(dailyKey, memFallback[dailyKey]); } catch (e) { /* memory only */ }
+  }
+  function dailyEntry(d) {
+    const key = localDay();
+    const old = d.days[key];
+    if (!old || !Number.isSafeInteger(old.count) || old.count < 0) d.days[key] = { count: 0, achieved: false };
+    return d.days[key];
+  }
+  function completeDaily(d, entry) {
+    if (entry.count < d.goal || entry.achieved) return;
+    entry.achieved = true;
+    const toast = document.getElementById("dailyToast");
+    toast.textContent = "今日の目標達成！よくがんばりました！";
+    toast.hidden = false;
+    clearTimeout(state.toastTimer);
+    state.toastTimer = setTimeout(() => { toast.hidden = true; }, 5000);
+  }
+  function countDailyAnswer() {
+    const d = loadDaily(), entry = dailyEntry(d);
+    entry.count++;
+    completeDaily(d, entry);
+    saveDaily(d);
+  }
+  function dailyStreak(d) {
+    const date = new Date();
+    let n = 0;
+    if (!d.days[localDay(date)]?.achieved) date.setDate(date.getDate() - 1);
+    while (d.days[localDay(date)]?.achieved) { n++; date.setDate(date.getDate() - 1); }
+    return n;
+  }
+  function showHome() {
+    stopTimer();
+    state.view = "home";
+    renderHome();
+  }
+  function renderHome() {
+    const cfg = data().config, labels = cfg.judgement.labels;
+    const summary = [0, 0, 0, 0];
+    cfg.objectives.forEach((o) => {
+      const stats = questionStats(allQuestions().filter((q) => q.objective === o.id || (q.alsoCovers || []).includes(o.id)));
+      summary[labels.indexOf(stats.stage)]++;
+    });
+    const items = cfg.domains.map((d) => ({ ...d, stats: domainStats(d.code) }));
+    const weak = items.filter((d) => labels.indexOf(d.stats.stage) < 2).sort((a, b) =>
+      labels.indexOf(a.stats.stage) - labels.indexOf(b.stats.stage) ||
+      (a.stats.weighted ?? 0) - (b.stats.weighted ?? 0) || a.stats.attempts - b.stats.attempts);
+    const d = loadDaily(), entry = dailyEntry(d);
+    app.innerHTML = header() + `<section class="card hero"><p class="eyebrow">学びを、毎日の一歩に。</p><h1>${esc(cfg.displayName)}</h1>
+      <p>今日も少しずつ、できることを増やしましょう。</p><div class="mapbtns"><button id="continuePractice" class="primary">${loadRecords().resume ? "練習を続ける" : "練習を始める"}</button>${examButtonHtml()}</div></section>
+      <section class="card" aria-labelledby="dailyTitle"><div class="dmain"><h2 id="dailyTitle">今日のチャレンジ</h2><span>連続達成 <strong>${dailyStreak(d)}日</strong></span></div>
+      <p class="src">全ツール共通・練習と模試の回答をカウント</p>
+      <label for="dailyGoal">今日の目標</label> <select id="dailyGoal">${goals.map((g) => `<option value="${g}" ${g === d.goal ? "selected" : ""}>${g}問</option>`).join("")}</select>
+      <p class="big">${entry.count} / ${d.goal}問</p><progress max="${d.goal}" value="${Math.min(entry.count, d.goal)}" aria-label="今日の回答数">${entry.count} / ${d.goal}</progress>
+      <p>${entry.count >= d.goal ? "今日の目標達成！すばらしい積み重ねです。" : `あと${d.goal - entry.count}問で今日の目標達成`}</p>
+      ${entry.count >= d.goal ? '<button id="morePractice" class="ghost">もっと解く</button>' : ""}</section>
+      <section class="card" aria-labelledby="guideTitle"><h2 id="guideTitle">スキルガイド</h2><p>学習目標ごとの習熟サマリー</p>
+      <div class="summary">${[3, 2, 1, 0].map((i) => `<span class="summary-item"><span class="chip ${stageClass(labels[i])}">${esc(labels[i])}</span> <strong>${summary[i]}件</strong></span>`).join("")}</div>
+      <h3>あなたはまだここが足りません</h3>
+      ${!items.some((x) => x.stats.attempts) ? '<p>まずは1問解いてみましょう。解いた分野から弱点が見えてきます。</p>' : ""}
+      ${weak.length ? weak.map((x) => `<div class="drow"><div class="dmain"><strong>${esc(x.name)}</strong><span class="chip ${stageClass(x.stats.stage)}">${esc(x.stats.stage)}</span></div>
+        <p class="dsub">正答率（直近加重） ${x.stats.weighted == null ? "—%" : Math.round(x.stats.weighted * 100) + "%"} ｜ 回答数 ${x.stats.attempts}回 / 総問題数 ${x.stats.total}問</p>
+        <button class="ghost" data-domain="${esc(x.code)}">練習する<span class="sr-only">：${esc(x.name)}</span></button></div>`).join("") : '<p>弱点はありません。全分野が安定以上です。</p>'}</section>`;
+    bindHeader();
+    document.getElementById("continuePractice").onclick = () => startSession(loadRecords().resume?.filter || null);
+    const more = document.getElementById("morePractice");
+    if (more) more.onclick = () => startSession(null);
+    app.querySelectorAll("[data-domain]").forEach((b) => { b.onclick = () => startSession(b.dataset.domain); });
+    app.querySelectorAll("[data-exam]").forEach((b) => { b.onclick = () => startExam(b.dataset.exam); });
+    document.getElementById("dailyGoal").onchange = (ev) => {
+      const daily = loadDaily(); daily.goal = Number(ev.target.value);
+      completeDaily(daily, dailyEntry(daily)); saveDaily(daily); renderHome();
+    };
+  }
+
   /* ---------- sessions ---------- */
   function stopTimer() { if (state.timerId) { clearInterval(state.timerId); state.timerId = null; } }
 
@@ -127,12 +220,14 @@
 
   function header() {
     const c = data().config;
+    document.documentElement.style.setProperty("--bp", c.theme.primary);
     const tabs = Object.keys(window.KT_DATA).map((pid) =>
       `<button data-prod="${pid}" class="${state.product === pid ? "on" : ""}">${esc(window.KT_DATA[pid].config.displayName)}</button>`).join("");
     const a = overallStats();
     return `<div class="bar">
-      <div class="tabs">${tabs}</div>
+      <nav class="tabs" aria-label="学習ツールの切替">${tabs}</nav>
       <div class="bar2">
+        <button data-view="home" class="ghost">ホーム</button>
         <button data-view="map" class="ghost">分野マップ</button>
         <span class="score">正解 ${state.score} / 回答 ${state.answered}</span>
       </div>
@@ -142,6 +237,7 @@
   }
 
   function render() {
+    if (state.view === "home") { renderHome(); return; }
     if (state.view === "map") { renderMap(); return; }
     if (state.mode === "exam") { renderExam(); return; }
     const qs = state.session.length ? state.session : allQuestions();
@@ -345,7 +441,7 @@
     stopTimer();
     state.mode = "exam"; state.view = "quiz"; state.filter = null;
     state.session = picked; state.idx = 0; state.score = 0; state.answered = 0;
-    state.exam = { kind, cfg: spec.cfg, startTs: Date.now(), limitSec, answers: {}, flags: {}, finished: false, result: null };
+    state.exam = { kind, cfg: spec.cfg, startTs: Date.now(), limitSec, answers: {}, flags: {}, dailyCounted: {}, finished: false, result: null };
     if (limitSec && typeof setInterval !== "undefined") {
       state.timerId = setInterval(tickTimer, 1000);
     }
@@ -425,6 +521,7 @@
       b.onclick = () => {
         const a = ex.answers[q.id] || (ex.answers[q.id] = {});
         if (q.type === "ui_spot" || q.type === "screen_spot") a.reason = b.dataset.choice; else a.choice = b.dataset.choice;
+        countExamAnswer(q);
         renderExam();
       };
     });
@@ -433,6 +530,7 @@
         const pick = () => {
           const a = ex.answers[q.id] || (ex.answers[q.id] = {});
           a.node = g.dataset.el;
+          countExamAnswer(q);
           renderExam();
         };
         g.addEventListener("click", pick);
@@ -447,6 +545,14 @@
     const fin = app.querySelectorAll("[data-finish]")[0];
     if (fin) fin.onclick = () => finishExam();
   }
+  function countExamAnswer(q) {
+    const ex = state.exam, a = ex.answers[q.id];
+    const complete = q.type === "ui_spot" || q.type === "screen_spot" ? a?.node && a?.reason : a?.choice;
+    if (complete && !ex.dailyCounted[q.id]) {
+      ex.dailyCounted[q.id] = true;
+      countDailyAnswer();
+    }
+  }
   function finishExam() {
     const ex = state.exam;
     if (!ex || ex.finished) return;
@@ -458,7 +564,7 @@
     qs.forEach((q) => {
       const ok = gradeExamQuestion(q, ex.answers[q.id]);
       if (ok) correct++;
-      recordAttempt(q, ok, ex.kind === "mock" ? "mock" : "cross");
+      recordAttempt(q, ok, ex.kind === "mock" ? "mock" : "cross", false);
       perDomain[q.domain] = perDomain[q.domain] || { ok: 0, n: 0 };
       perDomain[q.domain].n++; if (ok) perDomain[q.domain].ok++;
     });
@@ -684,13 +790,16 @@
 
   function bindHeader() {
     app.querySelectorAll("[data-prod]").forEach((b) => {
-      b.onclick = () => { state.product = b.dataset.prod; startSession(null); };
+      b.onclick = () => { state.product = b.dataset.prod; showHome(); };
     });
     app.querySelectorAll("[data-view]").forEach((b) => {
-      b.onclick = () => { if (b.dataset.view === "map") { state.view = "map"; renderMap(); } };
+      b.onclick = () => { if (b.dataset.view === "home") showHome(); else if (b.dataset.view === "map") { state.view = "map"; renderMap(); } };
     });
   }
 
-  startSession(null);
+  showHome();
+  // Refresh local-day progress after returning to a tab or crossing midnight.
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && state.view === "home") renderHome(); });
+  setInterval(() => { if (state.view === "home") renderHome(); }, 60000);
 })();
 

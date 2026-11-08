@@ -4,9 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SKILL QUEST（スキルアップ知識テスト）</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#FFF9F1;--card:#FFFFFF;--text:#3A3049;--muted:#8A7F95;--border:#F0E3D3;--bp:#6255D8;--ok:#0BA58F;--ng:#E5536B;--shadow:0 6px 18px rgba(163,116,76,.10)}
 *{box-sizing:border-box}body{margin:0;font-family:"Noto Sans JP",system-ui,sans-serif;background:linear-gradient(180deg,#FFF8EE 0%,#FFF3F5 45%,#F4F6FF 100%);background-attachment:fixed;color:var(--text);line-height:1.65}
@@ -98,9 +96,11 @@ textarea.export{width:100%;min-height:180px;margin-top:8px;border:2px solid var(
 .mw-foot{padding:0 16px 12px;color:var(--muted);font-size:11px}
 .notice{max-width:880px;margin:0 auto;padding:8px 20px 28px;color:var(--muted);font-size:12px;line-height:1.7}
 </style>
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <div id="app"></div>
+<div id="dailyToast" role="status" aria-live="polite" hidden></div>
 <footer class="notice">本サイトは個人の学習用に作成した非公式の練習サイトです。各製品の提供会社および各公式認定試験とは関係ありません。画面再現問題は自作のモック画面で、実際の製品とはデザイン・レイアウトが異なります。<br><a href="links.html">スキル開発リンク集</a></footer>
 <script src="data.js"></script>
 <script src="engine.js"></script>
