@@ -173,7 +173,7 @@
       labels.indexOf(a.stats.stage) - labels.indexOf(b.stats.stage) ||
       (a.stats.weighted ?? 0) - (b.stats.weighted ?? 0) || a.stats.attempts - b.stats.attempts);
     const d = loadDaily(), entry = dailyEntry(d);
-    app.innerHTML = header() + `<section class="card hero"><p class="eyebrow">学びを、毎日の一歩に。</p><h1>${esc(cfg.displayName)}</h1>
+    app.innerHTML = header() + `<aside class="card" aria-label="お知らせ"><strong>問題追加中！やればやるほど知識がつく！改善提案は江口まで！</strong></aside><section class="card hero"><p class="eyebrow">学びを、毎日の一歩に。</p><h1>${esc(cfg.displayName)}</h1>
       <p>今日も少しずつ、できることを増やしましょう。</p><div class="mapbtns"><button id="continuePractice" class="primary">${loadRecords().resume ? "練習を続ける" : "練習を始める"}</button>${examButtonHtml()}</div></section>
       <section class="card" aria-labelledby="dailyTitle"><div class="dmain"><h2 id="dailyTitle">今日のチャレンジ</h2><span>連続達成 <strong>${dailyStreak(d)}日</strong></span></div>
       <p class="src">全ツール共通・練習と模試の回答をカウント</p>
@@ -204,6 +204,7 @@
   function stopTimer() { if (state.timerId) { clearInterval(state.timerId); state.timerId = null; } }
 
   function startSession(filter, forceFresh) {
+    if (!allQuestions().length) return;
     stopTimer();
     state.mode = "practice"; state.exam = null;
     state.filter = filter || null;
@@ -233,7 +234,8 @@
       </div>
     </div>
     <div class="achv"><div class="achvbar"><div class="achvfill" style="width:${a.pct}%"></div></div><span class="achvtxt">達成度 ${a.pct}%（解いた問題 ${a.attempted}/${a.total}問 ・ マスター分野 ${a.masters}/${a.domains}）</span></div>
-    <p class="disc">${esc(c.disclaimer)}（試作版）</p>`;
+    <p class="disc">${esc(c.disclaimer)}（試作版）</p>
+    ${allQuestions().length ? "" : '<p class="card" role="status">問題は順次追加中です</p>'}`;
   }
 
   function render() {
@@ -431,6 +433,7 @@
     return `<button data-exam="${spec.kind}">${esc(spec.cfg.label)}${short}</button>`;
   }
   function startExam(kind) {
+    if (!allQuestions().length) return;
     const spec = examSpec();
     if (!spec || spec.kind !== kind) return;
     const want = kind === "mock" ? spec.cfg.count : spec.cfg.count[0];
@@ -792,6 +795,9 @@
   }
 
   function bindHeader() {
+    if (!allQuestions().length) {
+      app.querySelectorAll("#continuePractice, #morePractice, #allPractice, [data-domain], [data-exam]").forEach((b) => { b.disabled = true; });
+    }
     app.querySelectorAll("[data-prod]").forEach((b) => {
       b.onclick = () => { state.product = b.dataset.prod; showHome(); };
     });
