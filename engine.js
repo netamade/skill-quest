@@ -780,6 +780,9 @@
       ? `<p class="src">出典: <a href="${esc(q.source[0].url)}" target="_blank" rel="noopener">${esc(q.source[0].title)}</a></p>` : "";
     const qs = state.session.length ? state.session : allQuestions();
     fb.innerHTML = `<div class="fb ${correct ? "ok" : "ng"}">
+      ${correct
+        ? '<svg class="fb-mark fb-hanamaru" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 6 C72 4 92 22 94 46 C96 71 78 93 53 95 C28 97 7 79 6 54 C5 29 26 8 50 6 Z" fill="none" stroke="#e03a1e" stroke-width="5" stroke-linecap="round"/><path d="M50 18 C66 17 81 30 82 47 C83 65 69 82 52 83 C35 84 19 70 18 53 C17 35 33 19 50 18 Z" fill="none" stroke="#e03a1e" stroke-width="4" stroke-linecap="round"/><path d="M38 38 C44 30 58 29 64 37 M34 55 C31 45 36 33 45 29 M66 55 C69 65 63 76 54 79 M45 68 C53 73 65 70 69 61" fill="none" stroke="#e03a1e" stroke-width="4" stroke-linecap="round"/></svg>'
+        : '<svg class="fb-mark fb-batsu" viewBox="0 0 100 100" aria-hidden="true"><path d="M22 22 L78 78 M78 22 L22 78" stroke="#34548f" stroke-width="11" stroke-linecap="round" fill="none"/></svg>'}
       <strong>${correct ? "ナイス！その理解でOK！" : "ここが今回の学びポイント！"}</strong>
       ${partial ? `<p>${esc(partial)}</p>` : ""}
       <p>${esc(q.explanation)}</p>${src}
