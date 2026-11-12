@@ -6,22 +6,23 @@
 (function () {
   const app = document.getElementById("app");
   const state = { product: "blueprism", view: "quiz", mode: "practice", filter: null, session: [], idx: 0, score: 0, answered: 0, picked: null, pickedReason: null, locked: false, exam: null, timerId: null, resumed: false };
-  const POWER_AUTOMATE_QUESTIONS_URL = "https://sq-questions-api.sola-labo.workers.dev/v1/tools/powerautomate/questions";
-  let powerAutomateFetchAttempted = false;
+  const API_QUESTION_TOOLS = ["powerautomate", "copilot", "poweregg"];
+  const questionFetchAttempted = new Set();
 
-  async function loadPowerAutomateQuestions() {
-    const tool = window.KT_DATA.powerautomate;
-    if (state.product !== "powerautomate" || tool.bank.questions.length || powerAutomateFetchAttempted) return;
-    powerAutomateFetchAttempted = true;
+  async function loadToolQuestions() {
+    const product = state.product;
+    if (!API_QUESTION_TOOLS.includes(product) || questionFetchAttempted.has(product)) return;
+    const tool = window.KT_DATA[product];
+    questionFetchAttempted.add(product);
     try {
-      const response = await fetch(POWER_AUTOMATE_QUESTIONS_URL);
+      const response = await fetch(`https://sq-questions-api.sola-labo.workers.dev/v1/tools/${product}/questions`);
       if (response.status !== 200) return;
       const payload = await response.json();
-      if (!payload || !Array.isArray(payload.questions)) return;
+      if (!payload || !Array.isArray(payload.questions) || !payload.questions.length) return;
       tool.bank.questions = payload.questions;
       // A response arriving after a tab switch must not replace that tool's screen.
-      if (state.product === "powerautomate") render();
-    } catch (e) { /* Keep the existing empty-bank screen when the API is unavailable. */ }
+      if (state.product === product) render();
+    } catch (e) { /* Keep the static bank when the API is unavailable. */ }
   }
 
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -818,7 +819,7 @@
       app.querySelectorAll("#continuePractice, #morePractice, #allPractice, [data-domain], [data-exam]").forEach((b) => { b.disabled = true; });
     }
     app.querySelectorAll("[data-prod]").forEach((b) => {
-      b.onclick = () => { state.product = b.dataset.prod; showHome(); loadPowerAutomateQuestions(); };
+      b.onclick = () => { state.product = b.dataset.prod; showHome(); loadToolQuestions(); };
     });
     app.querySelectorAll("[data-view]").forEach((b) => {
       b.onclick = () => { if (b.dataset.view === "home") showHome(); else if (b.dataset.view === "map") { state.view = "map"; renderMap(); } };
