@@ -226,7 +226,7 @@
       `<button data-prod="${pid}" class="${state.product === pid ? "on" : ""}">${esc(window.KT_DATA[pid].config.displayName)}</button>`).join("");
     const a = overallStats();
     return `<div class="bar">
-      <nav class="tabs" aria-label="学習ツールの切替">${tabs}</nav>
+      <nav class="tabs" aria-label="学習ツールの切替">${tabs}<a href="https://netamade.github.io/regex-dojo/" target="_blank" rel="noopener noreferrer">正規表現道場 ↗</a></nav>
       <div class="bar2">
         <button data-view="home" class="ghost">ホーム</button>
         <button data-view="map" class="ghost">分野マップ</button>
