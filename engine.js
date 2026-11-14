@@ -6,7 +6,7 @@
 (function () {
   const app = document.getElementById("app");
   const state = { product: "blueprism", view: "quiz", mode: "practice", filter: null, session: [], idx: 0, score: 0, answered: 0, picked: null, pickedReason: null, locked: false, exam: null, timerId: null, resumed: false };
-  const API_QUESTION_TOOLS = ["powerautomate", "copilot", "poweregg"];
+  const API_QUESTION_TOOLS = ["powerautomate", "copilot", "poweregg", "blueprism", "asteria", "smartdb"];
   const questionFetchAttempted = new Set();
 
   async function loadToolQuestions() {
@@ -827,6 +827,7 @@
   }
 
   showHome();
+  loadToolQuestions();
   // Refresh local-day progress after returning to a tab or crossing midnight.
   document.addEventListener("visibilitychange", () => { if (!document.hidden && state.view === "home") renderHome(); });
   setInterval(() => { if (state.view === "home") renderHome(); }, 60000);
