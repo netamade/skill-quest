@@ -1,4 +1,5 @@
 window.releaseNotes = [
+  { "date": "2026-11-14", "text": "Power Automate の問題を40問追加しました" },
   { "date": "2026-11-14", "text": "Blue Prism、ASTERIA Warp、SmartDB の問題配信をデータベース方式に切り替えました" },
   { "date": "2026-11-13", "text": "Copilot Studio と PowerEgg の問題配信をデータベース方式に切り替えました" },
   { "date": "2026-11-13", "text": "Power Automate の問題配信をデータベース方式に切り替えました" }
