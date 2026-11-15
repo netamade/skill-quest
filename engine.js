@@ -822,7 +822,7 @@
      Backed by the feedback API (sq-feedback-api). Everything here is best-effort:
      any API failure leaves the quiz fully usable and the widget stays hidden/disabled. */
   const FEEDBACK_API_BASE = "https://sq-feedback-api.sola-labo.workers.dev";
-  const TURNSTILE_SITE_KEY = "";
+  const TURNSTILE_SITE_KEY = "0x4AAAAAAGBlMJsZ80NAuYbZ";
   const fbCountsCache = {};
   const fbVoteStoreKey = "kt:fbvotes:v1";
   function fbLoadVotes() {
