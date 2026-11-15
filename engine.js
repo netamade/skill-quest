@@ -6,7 +6,7 @@
 (function () {
   const app = document.getElementById("app");
   const state = { product: "blueprism", view: "quiz", mode: "practice", filter: null, session: [], idx: 0, score: 0, answered: 0, picked: null, pickedReason: null, locked: false, exam: null, timerId: null, resumed: false };
-  const API_QUESTION_TOOLS = ["powerautomate", "copilot", "poweregg", "blueprism", "asteria", "smartdb"];
+  const API_QUESTION_TOOLS = ["powerautomate", "copilot", "poweregg", "blueprism", "asteria", "smartdb", "sql", "dxskill", "ssms", "htmlcss"];
   const questionFetchAttempted = new Set();
 
   async function loadToolQuestions() {
