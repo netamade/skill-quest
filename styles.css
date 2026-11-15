@@ -23,6 +23,16 @@ select{border:1px solid var(--border);border-radius:10px;padding:8px 16px;backgr
 @media(min-width:720px){#app{padding:28px}.card{padding:28px}.tabs{grid-template-columns:repeat(5,minmax(0,1fr))}.summary{grid-template-columns:repeat(4,minmax(0,1fr))}.achv{flex-direction:row;align-items:center}.achvbar{flex:1}.achvtxt{max-width:70%}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important}}
 
+.qfb{margin-top:16px;border-top:1px solid var(--border);padding-top:12px}
+.qfb [hidden]{display:none!important}
+.qfb-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px}
+.qfb-label{font-size:13px;color:var(--muted);font-weight:700}
+.qfb-btn{border-radius:999px;padding:6px 14px;font-weight:700;min-height:40px}
+.qfb-btn:disabled{opacity:.55;cursor:default}
+.qfb-form{margin-top:10px}
+.qfb-form textarea{width:100%;box-sizing:border-box;border:2px solid var(--border);border-radius:12px;padding:10px;font:inherit;background:#fff;color:var(--text);margin-top:6px}
+.qfb-note{font-size:13px;color:var(--muted);margin:8px 0 0}
+.qfb-msg{font-size:13px;margin:8px 0 0}
 .fb-mark{width:84px;height:84px;display:block;margin:0 auto 8px;animation:fb-pop .25s ease-out}
 .fb-batsu{width:64px;height:64px}
 @keyframes fb-pop{0%{transform:scale(.4);opacity:0}70%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}
