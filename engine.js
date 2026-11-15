@@ -296,6 +296,7 @@
       <div class="choices">${choices}</div>
       <button id="answerBtn" disabled>回答する</button>
       <div id="feedback"></div>
+      <div class="qfb" data-qfb hidden></div>
     </div>`;
     bindHeader();
     const rr = document.getElementById("resumeReset");
@@ -311,6 +312,7 @@
     document.getElementById("answerBtn").onclick = () => grade(q);
     if (q.type === "ui_spot") bindFlow(q);
     if (q.type === "screen_spot") bindScreen(q);
+    mountQuestionFeedback(q);
   }
 
   /* ---------- skill radar + proficiency evaluation ---------- */
@@ -538,6 +540,7 @@
         <button data-finish="1">終了する</button>
       </div>
       <p class="src">試験中は解説を表示しません。回答は後から変更できます。</p>
+      <div class="qfb" data-qfb hidden></div>
     </div>`;
     bindHeader();
     app.querySelectorAll("[data-choice]").forEach((b) => {
@@ -567,6 +570,7 @@
     if (fl) fl.onclick = () => { ex.flags[q.id] = !ex.flags[q.id]; renderExam(); };
     const fin = app.querySelectorAll("[data-finish]")[0];
     if (fin) fin.onclick = () => finishExam();
+    mountQuestionFeedback(q);
   }
   function countExamAnswer(q) {
     const ex = state.exam, a = ex.answers[q.id];
@@ -812,6 +816,148 @@
       <button id="nextBtn">${state.idx + 1 >= qs.length ? "結果を見る" : "次へ"}</button></div>`;
     document.getElementById("answerBtn").disabled = true;
     document.getElementById("nextBtn").onclick = () => { state.idx++; render(); };
+  }
+
+  /* ---------- per-question feedback (Good/Bad votes + correction requests) ----------
+     Backed by the feedback API (sq-feedback-api). Everything here is best-effort:
+     any API failure leaves the quiz fully usable and the widget stays hidden/disabled. */
+  const FEEDBACK_API_BASE = "https://sq-feedback-api.sola-labo.workers.dev";
+  const TURNSTILE_SITE_KEY = "";
+  const fbCountsCache = {};
+  const fbVoteStoreKey = "kt:fbvotes:v1";
+  function fbLoadVotes() {
+    try {
+      const raw = (typeof localStorage !== "undefined" && localStorage.getItem(fbVoteStoreKey)) || memFallback[fbVoteStoreKey];
+      if (raw) { const p = JSON.parse(raw); if (p && typeof p === "object") return p; }
+    } catch (e) { /* fall through to empty */ }
+    return {};
+  }
+  function fbSaveVotes(v) {
+    memFallback[fbVoteStoreKey] = JSON.stringify(v);
+    try { if (typeof localStorage !== "undefined") localStorage.setItem(fbVoteStoreKey, memFallback[fbVoteStoreKey]); } catch (e) { /* in-memory only */ }
+  }
+  function fbFetch(path, options, timeoutMs) {
+    const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs || 8000) : null;
+    const opts = Object.assign({}, options || {});
+    if (ctrl) opts.signal = ctrl.signal;
+    return fetch(FEEDBACK_API_BASE + path, opts).finally(() => { if (timer) clearTimeout(timer); });
+  }
+  let turnstileLoader = null;
+  function loadTurnstile() {
+    if (window.turnstile) return Promise.resolve(window.turnstile);
+    if (turnstileLoader) return turnstileLoader;
+    turnstileLoader = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      s.async = true;
+      s.onload = () => { if (window.turnstile) resolve(window.turnstile); else reject(new Error("turnstile unavailable")); };
+      s.onerror = () => reject(new Error("turnstile load failed"));
+      document.head.appendChild(s);
+    });
+    return turnstileLoader;
+  }
+
+  function mountQuestionFeedback(q) {
+    const box = app.querySelector("[data-qfb]");
+    if (!box || !q || !q.id) return;
+    const tool = state.product;
+    const key = tool + ":" + q.id;
+    const voted = fbLoadVotes()[key] || null;
+    box.innerHTML = `
+      <div class="qfb-row">
+        <span class="qfb-label">この問題への評価</span>
+        <button type="button" class="ghost qfb-btn" data-fb-vote="good" ${voted ? "disabled" : ""}>👍 Good <span data-fb-count="good">…</span></button>
+        <button type="button" class="ghost qfb-btn" data-fb-vote="bad" ${voted ? "disabled" : ""}>👎 Bad <span data-fb-count="bad">…</span></button>
+        <button type="button" class="ghost qfb-btn" data-fb-correction>内容修正を依頼</button>
+      </div>
+      <div class="qfb-form" data-fb-form hidden>
+        <label class="qfb-label" for="qfbBody">修正してほしい内容</label>
+        <textarea id="qfbBody" data-fb-body rows="4" maxlength="1000" placeholder="例：選択肢の説明が公式ドキュメントと異なります"></textarea>
+        <div data-fb-turnstile></div>
+        <p class="qfb-note" data-fb-note hidden></p>
+        <div class="qfb-row">
+          <button type="button" class="ghost qfb-btn" data-fb-send>送信する</button>
+          <button type="button" class="ghost qfb-btn" data-fb-cancel>キャンセル</button>
+        </div>
+      </div>
+      <p class="qfb-msg" data-fb-msg role="status" hidden></p>`;
+    const msg = box.querySelector("[data-fb-msg]");
+    const showMsg = (t) => { msg.textContent = t; msg.hidden = false; };
+    const countEls = { good: box.querySelector('[data-fb-count="good"]'), bad: box.querySelector('[data-fb-count="bad"]') };
+    const voteBtns = Array.from(box.querySelectorAll("[data-fb-vote]"));
+    const applyCounts = (c) => {
+      if (!c) return;
+      fbCountsCache[key] = { good: Number(c.good) || 0, bad: Number(c.bad) || 0 };
+      countEls.good.textContent = fbCountsCache[key].good;
+      countEls.bad.textContent = fbCountsCache[key].bad;
+    };
+    if (fbCountsCache[key]) {
+      applyCounts(fbCountsCache[key]);
+      box.hidden = false;
+    } else {
+      fbFetch(`/v1/feedback/counts?tool=${encodeURIComponent(tool)}&question_id=${encodeURIComponent(q.id)}`, null, 6000)
+        .then((r) => { if (!r.ok) throw new Error("counts " + r.status); return r.json(); })
+        .then((c) => { applyCounts(c); box.hidden = false; })
+        .catch(() => { /* API unavailable: keep the widget hidden. */ });
+    }
+    voteBtns.forEach((b) => {
+      b.onclick = () => {
+        const kind = b.dataset.fbVote;
+        voteBtns.forEach((x) => { x.disabled = true; });
+        fbFetch("/v1/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tool, question_id: q.id, kind }) }, 10000)
+          .then((r) => { if (!r.ok) throw new Error("vote " + r.status); return r.json(); })
+          .then((c) => {
+            applyCounts(c);
+            const v = fbLoadVotes(); v[key] = kind; fbSaveVotes(v);
+            showMsg("投票しました。ありがとうございます。");
+          })
+          .catch(() => { voteBtns.forEach((x) => { x.disabled = false; }); });
+      };
+    });
+    const form = box.querySelector("[data-fb-form]");
+    const bodyEl = box.querySelector("[data-fb-body]");
+    const note = box.querySelector("[data-fb-note]");
+    const sendBtn = box.querySelector("[data-fb-send]");
+    const tsBox = box.querySelector("[data-fb-turnstile]");
+    const setNote = (t) => { note.textContent = t; note.hidden = !t; };
+    let tsToken = "";
+    let tsWidgetId = null;
+    if (!TURNSTILE_SITE_KEY) {
+      setNote("現在、受付を準備中です");
+      sendBtn.disabled = true;
+    }
+    box.querySelector("[data-fb-correction]").onclick = () => {
+      form.hidden = !form.hidden;
+      if (!form.hidden && TURNSTILE_SITE_KEY && tsWidgetId === null) {
+        loadTurnstile().then((ts) => {
+          tsWidgetId = ts.render(tsBox, {
+            sitekey: TURNSTILE_SITE_KEY,
+            callback: (token) => { tsToken = token; },
+            "expired-callback": () => { tsToken = ""; },
+            "error-callback": () => { tsToken = ""; }
+          });
+        }).catch(() => { setNote("確認ウィジェットを読み込めませんでした。時間をおいて再度お試しください。"); sendBtn.disabled = true; });
+      }
+    };
+    box.querySelector("[data-fb-cancel]").onclick = () => { form.hidden = true; };
+    sendBtn.onclick = () => {
+      if (!TURNSTILE_SITE_KEY) return;
+      const text = bodyEl.value.trim();
+      if (!text) { setNote("内容を入力してください。"); return; }
+      if (!tsToken) { setNote("「ロボットではありません」の確認が完了するまでお待ちください。"); return; }
+      sendBtn.disabled = true;
+      fbFetch("/v1/corrections", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tool, question_id: q.id, body: text, turnstile_token: tsToken }) }, 10000)
+        .then((r) => {
+          if (r.status === 503) { setNote("現在、受付を準備中です"); sendBtn.disabled = false; return; }
+          if (!r.ok) throw new Error("correction " + r.status);
+          form.hidden = true;
+          bodyEl.value = "";
+          showMsg("修正依頼を送信しました。ご協力ありがとうございます。");
+          if (window.turnstile && tsWidgetId !== null) { try { window.turnstile.reset(tsWidgetId); } catch (e) { /* ignore */ } tsToken = ""; }
+        })
+        .catch(() => { setNote("送信できませんでした。時間をおいて再度お試しください。"); sendBtn.disabled = false; });
+    };
   }
 
   function bindHeader() {
