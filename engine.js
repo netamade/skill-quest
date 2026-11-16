@@ -193,7 +193,7 @@
     const d = loadDaily(), entry = dailyEntry(d);
     const notes = (window.releaseNotes || []).slice().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
     const releaseHtml = notes.length ? `<section class="card" aria-labelledby="releaseTitle"><h2 id="releaseTitle">リリース情報</h2>${notes.map((n) => `<p><time datetime="${esc(n.date)}">${esc(n.date)}</time> ${esc(n.text)}</p>`).join("")}</section>` : "";
-    app.innerHTML = header() + `<aside class="card" aria-label="お知らせ"><strong>問題追加中！やればやるほど知識がつく！改善提案は江口まで！</strong></aside>${releaseHtml}<section class="card hero"><p class="eyebrow">学びを、毎日の一歩に。</p><h1>${esc(cfg.displayName)}</h1>
+    app.innerHTML = header() + `<aside class="card" aria-label="お知らせ"><strong>問題追加中！やればやるほど知識がつく！</strong></aside>${releaseHtml}<section class="card hero"><p class="eyebrow">学びを、毎日の一歩に。</p><h1>${esc(cfg.displayName)}</h1>
       <p>今日も少しずつ、できることを増やしましょう。</p><div class="mapbtns"><button id="continuePractice" class="primary">${loadRecords().resume ? "練習を続ける" : "練習を始める"}</button>${examButtonHtml()}</div></section>
       <section class="card" aria-labelledby="dailyTitle"><div class="dmain"><h2 id="dailyTitle">今日のチャレンジ</h2><span>連続達成 <strong>${dailyStreak(d)}日</strong></span></div>
       <p class="src">全ツール共通・練習と模試の回答をカウント</p>
