@@ -295,6 +295,7 @@
       ${body}
       <div class="choices">${choices}</div>
       <button id="answerBtn" disabled>回答する</button>
+      <p id="ansHint" style="font-size:13px;color:#B3261E;margin:8px 0 0;min-height:1.2em"></p>
       <div id="feedback"></div>
       <div class="qfb" data-qfb hidden></div>
     </div>`;
@@ -312,6 +313,7 @@
     document.getElementById("answerBtn").onclick = () => grade(q);
     if (q.type === "ui_spot") bindFlow(q);
     if (q.type === "screen_spot") bindScreen(q);
+    updateAnswerBtn(q);
     mountQuestionFeedback(q);
   }
 
@@ -672,8 +674,16 @@
   }
 
   function updateAnswerBtn(q) {
-    const ok = q.type === "ui_spot" || q.type === "screen_spot" ? (state.picked && state.pickedReason) : state.picked;
+    const spot = q.type === "ui_spot" || q.type === "screen_spot";
+    const ok = spot ? (state.picked && state.pickedReason) : state.picked;
     document.getElementById("answerBtn").disabled = !ok;
+    const hint = document.getElementById("ansHint");
+    if (hint) {
+      if (!spot || ok) hint.textContent = "";
+      else if (!state.picked && !state.pickedReason) hint.textContent = q.type === "screen_spot" ? "誤っていると思う行をクリックし、理由を選ぶと「回答する」が押せます" : "図の中で誤っていると思う場所をクリックし、理由を選ぶと「回答する」が押せます";
+      else if (!state.picked) hint.textContent = q.type === "screen_spot" ? "あと、誤っていると思う行をクリックしてください" : "あと、図の中で誤っていると思う場所（ノードまたは接続線）をクリックしてください";
+      else hint.textContent = "あと、理由を選んでください";
+    }
   }
 
   function flowSvg(flow, selectedId) {
