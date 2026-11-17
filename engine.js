@@ -7,22 +7,31 @@
   const app = document.getElementById("app");
   const state = { product: "blueprism", view: "quiz", mode: "practice", filter: null, session: [], idx: 0, score: 0, answered: 0, picked: null, pickedReason: null, locked: false, exam: null, timerId: null, resumed: false };
   const API_QUESTION_TOOLS = ["powerautomate", "copilot", "poweregg", "blueprism", "asteria", "smartdb", "sql", "dxskill", "uml", "ssms", "htmlcss"];
-  const questionFetchAttempted = new Set();
+  const questionFetchState = {}; // product -> "loading" | "error" | "done"
 
   async function loadToolQuestions() {
     const product = state.product;
-    if (!API_QUESTION_TOOLS.includes(product) || questionFetchAttempted.has(product)) return;
+    if (!API_QUESTION_TOOLS.includes(product)) return;
+    if (questionFetchState[product] === "loading" || questionFetchState[product] === "done") return;
     const tool = window.KT_DATA[product];
-    questionFetchAttempted.add(product);
+    questionFetchState[product] = "loading";
+    if (state.product === product && state.view === "home") render();
     try {
-      const response = await fetch(`https://sq-questions-api.sola-labo.workers.dev/v1/tools/${product}/questions`);
-      if (response.status !== 200) return;
+      // Questions ship as static JSON on the same origin as the site itself:
+      // the questions API (workers.dev) is unreachable from some networks
+      // (corporate proxies block it), while the site itself loads fine.
+      const response = await fetch(`questions/${product}.json`);
+      if (response.status !== 200) throw new Error("questions " + response.status);
       const payload = await response.json();
-      if (!payload || !Array.isArray(payload.questions) || !payload.questions.length) return;
-      tool.bank.questions = payload.questions;
+      if (!payload || !Array.isArray(payload.questions)) throw new Error("questions payload");
+      questionFetchState[product] = "done";
+      if (payload.questions.length) tool.bank.questions = payload.questions;
       // A response arriving after a tab switch must not replace that tool's screen.
       if (state.product === product) render();
-    } catch (e) { /* Keep the static bank when the API is unavailable. */ }
+    } catch (e) {
+      questionFetchState[product] = "error";
+      if (state.product === product) render();
+    }
   }
 
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -193,7 +202,13 @@
     const d = loadDaily(), entry = dailyEntry(d);
     const notes = (window.releaseNotes || []).slice().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
     const releaseHtml = notes.length ? `<section class="card" aria-labelledby="releaseTitle"><h2 id="releaseTitle">リリース情報</h2>${notes.map((n) => `<p><time datetime="${esc(n.date)}">${esc(n.date)}</time> ${esc(n.text)}</p>`).join("")}</section>` : "";
-    app.innerHTML = header() + `<aside class="card" aria-label="お知らせ"><strong>問題追加中！やればやるほど知識がつく！</strong></aside>${releaseHtml}<section class="card hero"><p class="eyebrow">学びを、毎日の一歩に。</p><h1>${esc(cfg.displayName)}</h1>
+    let loadHtml = "";
+    if (!allQuestions().length) {
+      const fs = questionFetchState[state.product];
+      if (fs === "loading") loadHtml = '<p class="card" role="status">問題を読み込み中です…</p>';
+      else if (fs === "error") loadHtml = '<p class="card" role="alert">問題を読み込めませんでした。通信環境を確認して、もう一度お試しください。 <button id="retryLoad" class="ghost">再読み込み</button></p>';
+    }
+    app.innerHTML = header() + `<aside class="card" aria-label="お知らせ"><strong>問題追加中！やればやるほど知識がつく！</strong></aside>${loadHtml}${releaseHtml}<section class="card hero"><p class="eyebrow">学びを、毎日の一歩に。</p><h1>${esc(cfg.displayName)}</h1>
       <p>今日も少しずつ、できることを増やしましょう。</p><div class="mapbtns"><button id="continuePractice" class="primary">${loadRecords().resume ? "練習を続ける" : "練習を始める"}</button>${examButtonHtml()}</div></section>
       <section class="card" aria-labelledby="dailyTitle"><div class="dmain"><h2 id="dailyTitle">今日のチャレンジ</h2><span>連続達成 <strong>${dailyStreak(d)}日</strong></span></div>
       <p class="src">全ツール共通・練習と模試の回答をカウント</p>
@@ -209,6 +224,8 @@
         <p class="dsub">正答率（直近加重） ${x.stats.weighted == null ? "—%" : Math.round(x.stats.weighted * 100) + "%"} ｜ 回答数 ${x.stats.attempts}回 / 総問題数 ${x.stats.total}問</p>
         <button class="ghost" data-domain="${esc(x.code)}">練習する<span class="sr-only">：${esc(x.name)}</span></button></div>`).join("") : '<p>弱点はありません。全分野が安定以上です。</p>'}</section>`;
     bindHeader();
+    const rl = document.getElementById("retryLoad");
+    if (rl) rl.onclick = () => loadToolQuestions();
     document.getElementById("continuePractice").onclick = () => startSession(loadRecords().resume?.filter || null);
     const more = document.getElementById("morePractice");
     if (more) more.onclick = () => startSession(null);
@@ -254,8 +271,7 @@
       </div>
     </div>
     <div class="achv"><div class="achvbar"><div class="achvfill" style="width:${a.pct}%"></div></div><span class="achvtxt">達成度 ${a.pct}%（解いた問題 ${a.attempted}/${a.total}問 ・ マスター分野 ${a.masters}/${a.domains}）</span></div>
-    <p class="disc">${esc(c.disclaimer)}（試作版）</p>
-    ${allQuestions().length ? "" : '<p class="card" role="status">問題は順次追加中です</p>'}`;
+    <p class="disc">${esc(c.disclaimer)}（試作版）</p>`;
   }
 
   function render() {
@@ -830,7 +846,9 @@
 
   /* ---------- per-question feedback (Good/Bad votes + correction requests) ----------
      Backed by the feedback API (sq-feedback-api). Everything here is best-effort:
-     any API failure leaves the quiz fully usable and the widget stays hidden/disabled. */
+     any API failure leaves the quiz fully usable; the widget still shows, but
+     counts may be blank and sending may fail with a message (the feedback API
+     host is unreachable from some networks). */
   const FEEDBACK_API_BASE = "https://sq-feedback-api.sola-labo.workers.dev";
   const TURNSTILE_SITE_KEY = "0x4AAAAAAGBlMJsZ80NAuYbZ";
   const fbCountsCache = {};
@@ -909,7 +927,7 @@
       fbFetch(`/v1/feedback/counts?tool=${encodeURIComponent(tool)}&question_id=${encodeURIComponent(q.id)}`, null, 6000)
         .then((r) => { if (!r.ok) throw new Error("counts " + r.status); return r.json(); })
         .then((c) => { applyCounts(c); box.hidden = false; })
-        .catch(() => { /* API unavailable: keep the widget hidden. */ });
+        .catch(() => { countEls.good.textContent = ""; countEls.bad.textContent = ""; box.hidden = false; });
     }
     voteBtns.forEach((b) => {
       b.onclick = () => {
@@ -922,7 +940,7 @@
             const v = fbLoadVotes(); v[key] = kind; fbSaveVotes(v);
             showMsg("投票しました。ありがとうございます。");
           })
-          .catch(() => { voteBtns.forEach((x) => { x.disabled = false; }); });
+          .catch(() => { voteBtns.forEach((x) => { x.disabled = false; }); showMsg("送信できませんでした。通信環境を確認して、時間をおいて再度お試しください。"); });
       };
     });
     const form = box.querySelector("[data-fb-form]");
