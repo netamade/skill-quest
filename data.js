@@ -1,4 +1,5 @@
 window.releaseNotes = [
+  {"date":"2026-11-17","text":"DX実務スキルに8問、SQLに3問、HTML & CSSに1問の問題を追加しました"},
   {"date":"2026-11-17","text":"BluePrismのDB管理ソフト　SQL Server Management Studioに問題を94問追加しました"},
   {"date":"2026-11-15","text":"「UML」を独立した学習コンテンツとして追加しました"},
   {"date":"2026-11-15","text":"新しい学習コンテンツ「SQL」「DX実務スキル」「BluePrismのDB管理ソフト　SQL Server Management Studio」「HTML & CSS」を追加しました"},
